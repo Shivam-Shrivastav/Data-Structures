@@ -14,10 +14,10 @@ class Solution:
     
         slow = head
         fast = head
-        while fast!=None and fast.next!=None:
+        while fast!=None and fast.next!=None: # इस व्हिले लूप में अगर फ़ास्ट पॉइंटर नुल्ल् में पोहच गया मतलब की कोई लूप नई है 
             slow = slow.next
             fast = fast.next.next
-            if(slow==fast):
+            if(slow==fast): # स्लो और फ़ास्ट दोनों मिल गए मतलब जरूर इसमें लूप है तभी मिले है
                 return True
         return False
             
