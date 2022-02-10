@@ -6,6 +6,12 @@ class MyQueue:
         self.arr = []
         self.front = 0
         self.rear = 0
+
+    # Queue operates on FIFO template
+    # Therefore firstly we append the queue and from there a real life queue will be made by push operation
+    # i.e 2 will come after 1, 3 will come after 2 and so on
+    # And since on in a queue first man/person is considered first therefore, will return the first element in the list
+    # then will move the front pointer to the next guy i.e 2nd guy and so on
     
     #Function to push an element x in a queue.
     def push(self, x):

@@ -6,6 +6,10 @@ class MyStack:
         self.arr=[]
     def isempty(self):
       return len(self.arr)==0
+
+    # Stack operates on LIFO template
+    # Therefore we will append the list on push operation
+    # And will pop out/return the last element of the list and delete it later
     
     #Function to push an integer into the stack.
     def push(self,data):
