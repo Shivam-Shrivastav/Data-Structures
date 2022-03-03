@@ -13,6 +13,7 @@ class Solution:
     #from left to right in Binary Tree.
     def topView(self,root):
         # code here
+        
         # We will use the line concept to solve this question
         map = {}
         q = collections.deque()
