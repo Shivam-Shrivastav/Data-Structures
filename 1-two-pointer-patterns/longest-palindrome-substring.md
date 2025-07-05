@@ -119,9 +119,64 @@ class Solution:
 1. Avoids unnecessary string slicing and comparisons.
 2. Efficient and elegant for palindrome problems by expanding around possible centers.
 
-```
+### Detailed Explanation:
+
+## 🧠 Understanding the Two Pointer Approach: Expand Around Center
+
+### 🔍 Core Idea:
+A **palindrome** reads the same forward and backward, so it **mirrors around its center**.
+
+For example:
+- `"aba"` → center at `b`
+- `"abba"` → center between `b` and `b`
+
+So to find the **longest palindrome**, we can try to **expand around every possible center**.
 
 ---
 
-Let me know the **next question** and **pattern** you'd like!
-```
+### 🧷 What are the Centers?
+For a string of length `n`, there are:
+- `n` odd-length centers (like "aba") → center at each character.
+- `n - 1` even-length centers (like "abba") → center between characters.
+
+So we check a total of `2n - 1` centers.
+
+---
+
+### 🔁 How Expansion Works:
+We use **two pointers**: `left` and `right`.
+
+1. Start with `left = center`, `right = center` → odd-length palindrome.
+2. Also try `left = center`, `right = center + 1` → even-length palindrome.
+
+Then:
+- While `left >= 0` and `right < len(s)` and `s[left] == s[right]`
+    - Expand outward: `left -= 1`, `right += 1`
+- After expansion, the palindrome is `s[left+1:right]`.
+
+---
+
+### ✅ Full Code Snippet (Recap):
+```python
+class Solution:
+    def longestPalindrome(self, s):
+        def expandAroundCenter(left, right):
+            while left >= 0 and right < len(s) and s[left] == s[right]:
+                left -= 1
+                right += 1
+            return s[left+1:right]
+
+        result = ""
+        for i in range(len(s)):
+            # Odd-length palindromes
+            temp1 = expandAroundCenter(i, i)
+            # Even-length palindromes
+            temp2 = expandAroundCenter(i, i + 1)
+
+            if len(temp1) > len(result):
+                result = temp1
+            if len(temp2) > len(result):
+                result = temp2
+
+        return result
+
