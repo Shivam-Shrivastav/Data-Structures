@@ -1,5 +1,8 @@
 ### **Two Pointers Pattern - Explained Concisely**  
 
+![Uploading image.png…]()
+
+
 #### **Concept:**  
 The Two Pointers technique uses two pointers (indices) to traverse a data structure (usually arrays or linked lists) efficiently, often reducing time complexity from O(n²) to O(n).  
 
