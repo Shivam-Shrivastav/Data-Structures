@@ -151,7 +151,7 @@ class Solution:
             # store current subset
             res.append(subset.copy())
 
-                for i in range(start, len(nums)):
+            for i in range(start, len(nums)):
                 # 🔴 SKIP duplicates at same level
                 if i > start and nums[i] == nums[i - 1]:
                     continue
