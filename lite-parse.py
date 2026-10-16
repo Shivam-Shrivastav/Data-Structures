@@ -1,159 +1,167 @@
 import argparse
 import re
+import subprocess
 from html import escape
 from pathlib import Path
 
-from liteparse import LiteParse
+
+def split_markdown_row(line):
+    """Split a Markdown table row into cells."""
+    line = line.strip()
+
+    if line.startswith("|"):
+        line = line[1:]
+    if line.endswith("|"):
+        line = line[:-1]
+
+    cells = []
+    current = []
+    escaped = False
+
+    for char in line:
+        if char == "|" and not escaped:
+            cells.append("".join(current).strip())
+            current = []
+        else:
+            current.append(char)
+
+        if char == "\\" and not escaped:
+            escaped = True
+        else:
+            escaped = False
+
+    cells.append("".join(current).strip())
+    return [cell.replace(r"\|", "|").replace("<br>", "\n") for cell in cells]
 
 
-def cell_text(cell):
-    if isinstance(cell, dict):
-        return str(cell.get("text", "") or "")
-    return str(getattr(cell, "text", "") or "")
-
-
-def get_value(obj, key, default=None):
-    if isinstance(obj, dict):
-        return obj.get(key, default)
-    return getattr(obj, key, default)
-
-
-def normalize_header(header):
-    return tuple(
-        re.sub(r"\s+", " ", cell_text(cell)).strip().casefold()
-        for cell in header
+def is_separator(line):
+    """Identify a Markdown table separator row."""
+    cells = split_markdown_row(line)
+    return bool(cells) and all(
+        re.fullmatch(r":?-{3,}:?", cell.replace(" ", ""))
+        for cell in cells
     )
 
 
-def extract_page_tables(page):
+def extract_markdown_tables(markdown):
+    """Extract consecutive Markdown table blocks."""
+    lines = markdown.splitlines()
     tables = []
+    index = 0
 
-    for block in get_value(page, "blocks", []) or []:
-        if get_value(block, "kind", "") != "table":
+    while index < len(lines):
+        if (
+            "|" not in lines[index]
+            or index + 1 >= len(lines)
+            or "|" not in lines[index + 1]
+            or not is_separator(lines[index + 1])
+        ):
+            index += 1
             continue
 
-        header = get_value(block, "header", []) or []
-        rows = get_value(block, "rows", []) or []
+        header = split_markdown_row(lines[index])
+        index += 2
+        rows = []
 
-        header = [cell_text(cell) for cell in header]
-        rows = [[cell_text(cell) for cell in row] for row in rows]
+        while index < len(lines) and "|" in lines[index]:
+            row = split_markdown_row(lines[index])
 
-        if header or rows:
-            tables.append({
-                "page": get_value(page, "page_num"),
-                "header": header,
-                "rows": rows,
-            })
+            if is_separator(lines[index]):
+                index += 1
+                continue
+
+            # Keep the row structure consistent with the header.
+            if len(row) < len(header):
+                row.extend([""] * (len(header) - len(row)))
+            elif len(row) > len(header):
+                row = row[:len(header)]
+
+            rows.append(row)
+            index += 1
+
+        tables.append({"header": header, "rows": rows})
 
     return tables
 
 
-def merge_continued_tables(page_tables):
-    """Merge consecutive-page tables when their normalized headers match."""
-    merged = []
-
-    for table in page_tables:
-        header = table["header"]
-        rows = table["rows"]
-
-        if not merged:
-            merged.append({
-                "header": header,
-                "rows": rows[:],
-                "pages": [table["page"]],
-            })
-            continue
-
-        previous = merged[-1]
-        same_header = (
-            bool(header)
-            and bool(previous["header"])
-            and normalize_header(header) == normalize_header(previous["header"])
-        )
-        consecutive_page = (
-            table["page"] is not None
-            and previous["pages"][-1] is not None
-            and table["page"] == previous["pages"][-1] + 1
-        )
-
-        if same_header and consecutive_page:
-            previous["rows"].extend(rows)
-            previous["pages"].append(table["page"])
-        else:
-            merged.append({
-                "header": header,
-                "rows": rows[:],
-                "pages": [table["page"]],
-            })
-
-    return merged
-
-
 def table_to_html(table):
-    """Return plain table HTML without styling or extra document markup."""
-    output = ["<table>"]
+    """Create simple HTML containing only the table."""
+    html = ["<table>", "<thead>", "<tr>"]
 
-    if table["header"]:
-        output.append("<thead><tr>")
-        for value in table["header"]:
-            output.append(f"<th>{escape(value)}</th>")
-        output.append("</tr></thead>")
+    for cell in table["header"]:
+        html.append(f"<th>{escape(cell)}</th>")
 
-    if table["rows"]:
-        output.append("<tbody>")
-        for row in table["rows"]:
-            output.append("<tr>")
-            for value in row:
-                output.append(f"<td>{escape(value)}</td>")
-            output.append("</tr>")
-        output.append("</tbody>")
+    html.extend(["</tr>", "</thead>", "<tbody>"])
 
-    output.append("</table>")
-    return "\n".join(output)
+    for row in table["rows"]:
+        html.append("<tr>")
+        for cell in row:
+            html.append(f"<td>{escape(cell)}</td>")
+        html.append("</tr>")
+
+    html.extend(["</tbody>", "</table>"])
+    return "\n".join(html)
 
 
-def process_pdf(pdf_path, output_dir, parser):
-    result = parser.parse(str(pdf_path))
-    page_tables = []
+def process_pdf(pdf_path, output_dir, workspace_root):
+    workspace = workspace_root / pdf_path.stem
 
-    for page in result.pages:
-        page_tables.extend(extract_page_tables(page))
+    # Use olmOCR's official CLI to process the PDF and produce Markdown.
+    command = [
+        "olmocr",
+        str(workspace),
+        "--markdown",
+        "--pdfs",
+        str(pdf_path),
+    ]
 
-    tables = merge_continued_tables(page_tables)
+    subprocess.run(command, check=True)
+
+    markdown_files = list((workspace / "markdown").rglob("*.md"))
+
+    if not markdown_files:
+        raise FileNotFoundError(
+            f"olmOCR did not produce Markdown for {pdf_path.name}"
+        )
+
+    # Each workspace contains one input PDF.
+    markdown = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in sorted(markdown_files)
+    )
+
+    tables = extract_markdown_tables(markdown)
 
     pdf_output = output_dir / pdf_path.stem
     pdf_output.mkdir(parents=True, exist_ok=True)
 
-    for index, table in enumerate(tables, start=1):
-        pages = [p for p in table["pages"] if p is not None]
-
-        if pages:
-            page_label = (
-                f"pages_{pages[0]:04d}-{pages[-1]:04d}"
-                if len(pages) > 1
-                else f"page_{pages[0]:04d}"
-            )
-        else:
-            page_label = "pages_unknown"
-
-        filename = f"table_{index:04d}_{page_label}.html"
+    for number, table in enumerate(tables, start=1):
+        filename = f"table_{number:04d}.html"
         (pdf_output / filename).write_text(
             table_to_html(table),
             encoding="utf-8",
         )
 
-    print(f"{pdf_path.name}: saved {len(tables)} tables")
+    print(f"{pdf_path.name}: extracted {len(tables)} tables")
 
 
 def main():
-    cli = argparse.ArgumentParser()
+    cli = argparse.ArgumentParser(
+        description="Extract PDF tables using olmOCR and save simple HTML."
+    )
     cli.add_argument("--input", required=True, help="PDF file or folder")
-    cli.add_argument("--output", default="output", help="Output directory")
+    cli.add_argument("--output", default="output", help="HTML output folder")
+    cli.add_argument(
+        "--workspace",
+        default="olmocr_workspace",
+        help="olmOCR processing workspace",
+    )
     cli.add_argument("--recursive", action="store_true")
     args = cli.parse_args()
 
     input_path = Path(args.input).expanduser().resolve()
     output_dir = Path(args.output).expanduser().resolve()
+    workspace_root = Path(args.workspace).expanduser().resolve()
 
     if not input_path.exists():
         raise FileNotFoundError(f"Input not found: {input_path}")
@@ -169,18 +177,13 @@ def main():
     if not pdf_files:
         raise FileNotFoundError(f"No PDFs found in {input_path}")
 
-    parser = LiteParse(
-        output_format="json",
-        extract_blocks=True,
-        ocr_enabled=True,
-        continue_on_page_error=True,
-    )
-
-    output_dir.mkdir(parents=True, exist_ok=True)
-
     for pdf_path in pdf_files:
         try:
-            process_pdf(pdf_path, output_dir, parser)
+            process_pdf(
+                pdf_path,
+                output_dir,
+                workspace_root,
+            )
         except Exception as exc:
             print(f"Failed: {pdf_path.name}: {exc}")
 
