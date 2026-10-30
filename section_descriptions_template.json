@@ -1,0 +1,15 @@
+{
+  "bank_name": "Custom Bank Name",
+  "sections": [
+    {
+      "section_id": "section_one",
+      "name": "Exact Section Heading",
+      "description": "Paste the stakeholder-provided description of what this section represents. Include its purpose, date context, and the types of records or fields it contains."
+    },
+    {
+      "section_id": "section_two",
+      "name": "Another Exact Section Heading",
+      "description": "Paste the description for the second selected section here. Add one object per section that should be identified and merged."
+    }
+  ]
+}
